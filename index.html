@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSA Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-analytics-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--bg2:#161b27;--bg3:#1e2535;--bg4:#252d3d;
+  --border:#2a3348;--border2:#3a4560;
+  --text:#e8eaf0;--text2:#8b9ab8;--text3:#5a6a88;
+  --green:#00c853;--green-bg:rgba(0,200,83,0.12);--green-border:rgba(0,200,83,0.3);
+  --blue:#2979ff;--blue-bg:rgba(41,121,255,0.12);--blue-border:rgba(41,121,255,0.3);
+  --accent:#4f8aff;
+  --easy:#00c853;--medium:#ffa726;--hard:#ef5350;
+  --easy-dark:#1a3a2a;--medium-dark:#3a2a10;--hard-dark:#3a1515;
+  --font:'DM Sans',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+.app{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+.sync-banner{position:fixed;top:0;left:0;right:0;z-index:200;padding:8px 20px;font-size:12px;display:flex;align-items:center;gap:10px;transition:all .3s;transform:translateY(-100%)}
+.sync-banner.show{transform:translateY(0)}
+.sync-banner.syncing{background:#1a2540;border-bottom:1px solid #2979ff;color:#7eb3ff}
+.sync-banner.saved{background:#1a2e1a;border-bottom:1px solid #00c853;color:#00c853}
+.sync-banner.error{background:#2e1a1a;border-bottom:1px solid #ef5350;color:#ef5350}
+.sdot{width:7px;height:7px;border-radius:50%;background:currentColor;animation:pulse 1s infinite}
+.sync-banner.saved .sdot,.sync-banner.error .sdot{animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+.logo{padding:20px 20px 16px;border-bottom:1px solid var(--border)}
+.logo h1{font-size:18px;font-weight:600}
+.logo .sub{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:3px}
+.logo .cloud-tag{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--green);background:var(--easy-dark);border:1px solid var(--green-border);border-radius:4px;padding:2px 7px;margin-top:6px}
+.s-sec{padding:12px 12px 0}
+.s-sec-title{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:1.2px;text-transform:uppercase;padding:0 8px;margin-bottom:8px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all .15s;font-size:13px;color:var(--text2);margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--blue-bg);color:#7eb3ff;border-left:2px solid var(--blue)}
+.tdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tcnt{margin-left:auto;font-size:11px;font-family:var(--mono);color:var(--text3)}
+.sb-stats{margin-top:auto;padding:16px;border-top:1px solid var(--border)}
+.sstat{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:12px}
+.sstat .lbl{color:var(--text3)}.sstat .val{font-weight:600;font-family:var(--mono)}
+.streak{display:flex;align-items:center;gap:6px;background:rgba(255,167,38,0.12);border:1px solid rgba(255,167,38,0.25);border-radius:8px;padding:8px 12px;margin-bottom:12px}
+.streak .snum{font-size:18px;font-weight:600;color:#ffa726;font-family:var(--mono)}
+.streak .slbl{font-size:11px;color:var(--text3)}
+.main{padding:24px;overflow-y:auto}
+.topbar{display:flex;align-items:center;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.topbar h2{font-size:20px;font-weight:600;flex:1}
+.sw{position:relative;flex:1;max-width:300px}
+.sw input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px 8px 36px;font-size:13px;color:var(--text);font-family:var(--font);outline:none;transition:border .15s}
+.sw input:focus{border-color:var(--accent)}
+.sw svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3)}
+.dash{display:none}.dash.on{display:block}
+.qview{display:none}.qview.on{display:block}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px}
+.sc{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:16px;transition:border .15s}
+.sc:hover{border-color:var(--border2)}
+.sc .sl{font-size:11px;color:var(--text3);font-weight:500;letter-spacing:.5px;margin-bottom:8px}
+.sc .sv{font-size:28px;font-weight:600;font-family:var(--mono);line-height:1}
+.sc .ss{font-size:11px;color:var(--text3);margin-top:4px}
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.cc{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px}
+.cc h3{font-size:13px;font-weight:500;color:var(--text2);margin-bottom:16px}
+.full{grid-column:1/-1}
+.dt-box{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:24px}
+.dt-box h3{font-size:14px;font-weight:500;margin-bottom:14px}
+.dt-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.dt-row input[type=number]{background:var(--bg4);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:14px;font-family:var(--mono);width:80px;outline:none}
+.dt-row input[type=number]:focus{border-color:var(--accent)}
+.ti{font-size:13px;color:var(--text2)}.ti strong{color:var(--text);font-family:var(--mono)}
+.tg{margin-bottom:28px}
+.th{display:flex;align-items:center;gap:12px;margin-bottom:12px;cursor:pointer;user-select:none;padding:10px 14px;background:var(--bg3);border-radius:10px;border:1px solid var(--border)}
+.th:hover{border-color:var(--border2)}
+.th h3{font-size:14px;font-weight:600}
+.th .tcnt2{font-size:12px;color:var(--text3);font-family:var(--mono)}
+.th .tpw{flex:1;max-width:200px;margin-left:auto}
+.th .tpb{background:var(--bg4);border-radius:3px;height:4px;overflow:hidden}
+.th .tpf{height:100%;border-radius:3px;transition:width .4s}
+.th .tpp{font-size:10px;color:var(--text3);font-family:var(--mono);text-align:right;margin-top:2px}
+.th .ci{color:var(--text3);transition:transform .2s;font-size:16px}
+.th.col .ci{transform:rotate(-90deg)}
+.tcc{overflow:hidden;transition:max-height .3s}
+.tcc.col{max-height:0!important}
+.qt{width:100%;border-collapse:collapse;background:var(--bg2);border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+.qt thead tr{background:var(--bg3)}
+.qt th{font-size:11px;color:var(--text3);font-weight:500;padding:10px 14px;text-align:left;letter-spacing:.5px}
+.qt tbody tr{border-top:1px solid var(--border);transition:background .15s}
+.qt tbody tr:hover{background:var(--bg3)}
+.qt tbody tr.done{background:var(--green-bg)}
+.qt tbody tr.done:hover{background:rgba(0,200,83,0.16)}
+.qt td{padding:10px 14px;font-size:13px;vertical-align:middle}
+.qt td.qn{font-weight:500;color:var(--text)}
+.qt tbody tr.done td.qn{color:var(--easy)}
+.dtag{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 8px;border-radius:5px}
+.dtag.easy{background:var(--easy-dark);color:var(--easy)}
+.dtag.medium{background:var(--medium-dark);color:var(--medium)}
+.dtag.hard{background:var(--hard-dark);color:var(--hard)}
+.dtag.vhard{background:#1c1c1c;color:#666}
+.dtag .cb{width:6px;height:6px;border-radius:50%}
+.dtag.easy .cb{background:var(--easy)}.dtag.medium .cb{background:var(--medium)}
+.dtag.hard .cb{background:var(--hard)}.dtag.vhard .cb{background:#444}
+.qchk{width:18px;height:18px;border:2px solid var(--border2);border-radius:4px;cursor:pointer;appearance:none;-webkit-appearance:none;background:transparent;transition:all .15s}
+.qchk:checked{background:var(--easy);border-color:var(--easy)}
+.qchk:checked::after{content:'✓';display:block;color:#000;font-size:12px;font-weight:700;text-align:center;line-height:14px}
+.ni{background:transparent;border:none;color:var(--text2);font-size:12px;font-family:var(--font);outline:none;width:120px}
+.ni:focus{color:var(--text)}
+.dc{font-size:11px;color:var(--text3);font-family:var(--mono);white-space:nowrap}
+.star{cursor:pointer;color:var(--text3);font-size:14px;transition:color .15s}
+.star.on{color:#ffa726}.star:hover{color:#ffa726}
+.sbadge{font-size:10px;background:var(--green-bg);color:var(--easy);border:1px solid var(--green-border);border-radius:4px;padding:2px 6px;font-family:var(--mono)}
+.ftbar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.fl{font-size:11px;color:var(--text3);margin-right:4px}
+.fc{background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:5px 12px;border-radius:20px;font-size:12px;cursor:pointer;font-family:var(--font);transition:all .15s}
+.fc:hover,.fc.on{border-color:var(--accent);color:#7eb3ff;background:var(--blue-bg)}
+.fc.ec.on{border-color:var(--easy);color:var(--easy);background:var(--easy-dark)}
+.fc.mc.on{border-color:var(--medium);color:var(--medium);background:var(--medium-dark)}
+.fc.hc.on{border-color:var(--hard);color:var(--hard);background:var(--hard-dark)}
+.stbtn{position:fixed;bottom:24px;right:24px;background:var(--accent);color:#fff;border:none;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:18px;display:none;align-items:center;justify-content:center;z-index:99}
+.stbtn.show{display:flex}
+.lov{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .5s}
+.lov.gone{opacity:0;pointer-events:none}
+.lsp{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lt{font-size:14px;color:var(--text2)}
+@media(max-width:768px){.app{grid-template-columns:1fr}.sidebar{position:relative;height:auto}.cgrid{grid-template-columns:1fr}.sgrid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="loading-overlay lov" id="lov"><div class="lsp"></div><div class="lt">Loading your progress…</div></div>
+<div class="sync-banner" id="sbanner"><span class="sdot"></span><span id="smsg">Saving…</span></div>
+
+<div class="app">
+<aside class="sidebar">
+  <div class="logo">
+    <h1>DSA Tracker</h1>
+    <div class="cloud-tag">☁ Synced across devices</div>
+    <div class="sub" id="sbpct">0% complete</div>
+  </div>
+  <div class="s-sec" style="margin-top:12px">
+    <div class="s-sec-title">Navigation</div>
+    <button class="nav-item active" onclick="showDash()" id="nav-dash">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </button>
+    <button class="nav-item" onclick="showQs('all')" id="nav-all">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      All Questions
+    </button>
+  </div>
+  <div class="s-sec" style="margin-top:16px">
+    <div class="s-sec-title">Topics</div>
+    <div id="tnav"></div>
+  </div>
+  <div class="sb-stats">
+    <div class="streak"><span style="font-size:20px">🔥</span><div><div class="snum" id="stknum">0</div><div class="slbl">day streak</div></div></div>
+    <div class="sstat"><span class="lbl">Total</span><span class="val" id="sbtot">0</span></div>
+    <div class="sstat"><span class="lbl">Solved</span><span class="val" id="sbsol" style="color:var(--easy)">0</span></div>
+    <div class="sstat"><span class="lbl">Remaining</span><span class="val" id="sbrem">0</span></div>
+    <div class="sstat"><span class="lbl">Today</span><span class="val" id="sbtod" style="color:var(--blue)">0</span></div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <h2 id="mtitle">Dashboard</h2>
+    <div class="sw">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="sinput" placeholder="Search questions…" oninput="onSearch()">
+    </div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="dash on" id="vdash">
+    <div class="sgrid">
+      <div class="sc"><div class="sl">TOTAL QUESTIONS</div><div class="sv" id="dtot">0</div><div class="ss">across all topics</div></div>
+      <div class="sc"><div class="sl">SOLVED</div><div class="sv" id="dsol" style="color:var(--easy)">0</div><div class="ss" id="dsolpct">0%</div></div>
+      <div class="sc"><div class="sl">REMAINING</div><div class="sv" id="drem" style="color:var(--blue)">0</div><div class="ss">questions left</div></div>
+      <div class="sc"><div class="sl">TODAY</div><div class="sv" id="dtod" style="color:var(--medium)">0</div><div class="ss">solved today</div></div>
+      <div class="sc"><div class="sl">EASY SOLVED</div><div class="sv" id="deasy" style="color:var(--easy)">0</div></div>
+      <div class="sc"><div class="sl">MEDIUM SOLVED</div><div class="sv" id="dmed" style="color:var(--medium)">0</div></div>
+      <div class="sc"><div class="sl">HARD SOLVED</div><div class="sv" id="dhard" style="color:var(--hard)">0</div></div>
+      <div class="sc"><div class="sl">EST. DAYS LEFT</div><div class="sv" id="ddays" style="font-size:20px">—</div><div class="ss">at target pace</div></div>
+    </div>
+    <div class="dt-box">
+      <h3>Daily Target</h3>
+      <div class="dt-row">
+        <label style="font-size:13px;color:var(--text2)">Questions/day:</label>
+        <input type="number" id="dtarget" value="3" min="1" max="50" oninput="onTarget()">
+        <span class="ti">Completion: <strong id="estdays">—</strong></span>
+      </div>
+    </div>
+    <div class="cgrid">
+      <div class="cc"><h3>Overall Completion</h3><div style="position:relative;height:220px"><canvas id="dc1" role="img" aria-label="Completion donut"></canvas></div></div>
+      <div class="cc"><h3>Difficulty Split</h3><div style="position:relative;height:220px"><canvas id="dc2" role="img" aria-label="Difficulty chart"></canvas></div></div>
+      <div class="cc full"><h3>Topic Progress</h3><div style="position:relative" id="tcwrap"><canvas id="dc3" role="img" aria-label="Topic bar chart"></canvas></div></div>
+      <div class="cc full"><h3>Daily Progress (14 days)</h3><div style="position:relative;height:200px"><canvas id="dc4" role="img" aria-label="Daily line chart"></canvas></div></div>
+    </div>
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:20px">
+      <h3 style="font-size:13px;font-weight:500;color:var(--text2);margin-bottom:16px">Topic Completion</h3>
+      <div id="tpbars"></div>
+    </div>
+  </div>
+
+  <!-- Questions -->
+  <div class="qview" id="vqs">
+    <div class="ftbar">
+      <span class="fl">Difficulty:</span>
+      <button class="fc ec" id="fce" onclick="tf('easy')">Easy</button>
+      <button class="fc mc" id="fcm" onclick="tf('medium')">Medium</button>
+      <button class="fc hc" id="fch" onclick="tf('hard')">Hard</button>
+      <span style="width:1px;background:var(--border);height:20px;margin:0 4px"></span>
+      <span class="fl">Status:</span>
+      <button class="fc" id="fcs" onclick="tf('solved')">Solved</button>
+      <button class="fc" id="fcu" onclick="tf('unsolved')">Unsolved</button>
+    </div>
+    <div id="qcont"></div>
+  </div>
+</main>
+</div>
+
+<button class="stbtn" id="stbtn" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const TOPICS=[
+  {id:'arrays',name:'Arrays',color:'#4f8aff'},
+  {id:'strings',name:'Strings',color:'#7c4dff'},
+  {id:'linked-lists',name:'Linked Lists',color:'#00bcd4'},
+  {id:'stacks',name:'Stacks',color:'#ff7043'},
+  {id:'binary-trees',name:'Binary Trees',color:'#26a69a'},
+  {id:'bst',name:'Binary Search Trees',color:'#42a5f5'},
+  {id:'graphs',name:'Graphs',color:'#ef5350'},
+  {id:'recursion',name:'Recursion',color:'#ab47bc'},
+  {id:'dp',name:'Dynamic Programming',color:'#ffa726'},
+  {id:'greedy',name:'Greedy Algorithms',color:'#66bb6a'},
+  {id:'heaps',name:'Heaps',color:'#ff5722'},
+  {id:'tries',name:'Tries',color:'#26c6da'},
+  {id:'sorting',name:'Sorting',color:'#ec407a'},
+  {id:'searching',name:'Searching',color:'#29b6f6'},
+  {id:'famous-algos',name:'Famous Algorithms',color:'#ffca28'},
+];
+const DC={easy:'#00c853',medium:'#2979ff',hard:'#ef5350',vhard:'#282828'};
+const DL={easy:'Easy',medium:'Medium',hard:'Hard',vhard:'Very Hard'};
+const Q=[
+  {id:'a1',t:'arrays',name:'Two Number Sum',d:'easy'},{id:'a2',t:'arrays',name:'Validate Subsequence',d:'easy'},
+  {id:'a3',t:'arrays',name:'Sorted Squared Array',d:'easy'},{id:'a4',t:'arrays',name:'Tournament Winner',d:'easy'},
+  {id:'a5',t:'arrays',name:'Non-Constructible Change',d:'easy'},{id:'a6',t:'arrays',name:'Transpose Matrix',d:'easy'},
+  {id:'a7',t:'arrays',name:'Three Number Sum',d:'medium'},{id:'a8',t:'arrays',name:'Smallest Difference',d:'medium'},
+  {id:'a9',t:'arrays',name:'Move Element To End',d:'medium'},{id:'a10',t:'arrays',name:'Monotonic Array',d:'medium'},
+  {id:'a11',t:'arrays',name:'Spiral Traverse',d:'medium'},{id:'a12',t:'arrays',name:'Longest Peak',d:'medium'},
+  {id:'a13',t:'arrays',name:'Array Of Products',d:'medium'},{id:'a14',t:'arrays',name:'First Duplicate Value',d:'medium'},
+  {id:'a15',t:'arrays',name:'Merge Overlapping Intervals',d:'medium'},{id:'a16',t:'arrays',name:'Best Seat',d:'medium'},
+  {id:'a17',t:'arrays',name:'Zero Sum Subarray',d:'medium'},{id:'a18',t:'arrays',name:'Missing Numbers',d:'medium'},
+  {id:'a19',t:'arrays',name:'Majority Element',d:'medium'},{id:'a20',t:'arrays',name:'Sweet And Savory',d:'medium'},
+  {id:'a21',t:'arrays',name:'Four Number Sum',d:'hard'},{id:'a22',t:'arrays',name:'Subarray Sort',d:'hard'},
+  {id:'a23',t:'arrays',name:'Largest Range',d:'hard'},{id:'a24',t:'arrays',name:'Min Rewards',d:'hard'},
+  {id:'a25',t:'arrays',name:'Zigzag Traverse',d:'hard'},{id:'a26',t:'arrays',name:'Longest Subarray With Sum',d:'hard'},
+  {id:'a27',t:'arrays',name:'Knight Connection',d:'hard'},{id:'a28',t:'arrays',name:'Count Squares',d:'hard'},
+  {id:'a29',t:'arrays',name:'Apartment Hunting',d:'vhard'},{id:'a30',t:'arrays',name:'Calendar Matching',d:'vhard'},
+  {id:'a31',t:'arrays',name:'Waterfall Streams',d:'vhard'},{id:'a32',t:'arrays',name:'Minimum Area Rectangle',d:'vhard'},
+  {id:'a33',t:'arrays',name:'Line Through Points',d:'vhard'},
+  {id:'b1',t:'bst',name:'Find Closest Value In BST',d:'easy'},
+  {id:'b2',t:'bst',name:'BST Construction',d:'medium'},{id:'b3',t:'bst',name:'Validate BST',d:'medium'},
+  {id:'b4',t:'bst',name:'BST Traversal',d:'medium'},{id:'b5',t:'bst',name:'Min Height BST',d:'medium'},
+  {id:'b6',t:'bst',name:'Find Kth Largest Value In BST',d:'medium'},{id:'b7',t:'bst',name:'Reconstruct BST',d:'medium'},
+  {id:'b8',t:'bst',name:'Same BSTs',d:'hard'},{id:'b9',t:'bst',name:'Validate Three Nodes',d:'hard'},
+  {id:'b10',t:'bst',name:'Repair BST',d:'hard'},{id:'b11',t:'bst',name:'Sum BSTs',d:'hard'},
+  {id:'b12',t:'bst',name:'Right Smaller Than',d:'vhard'},
+  {id:'bt1',t:'binary-trees',name:'Branch Sums',d:'easy'},{id:'bt2',t:'binary-trees',name:'Node Depths',d:'easy'},
+  {id:'bt3',t:'binary-trees',name:'Evaluate Expression Tree',d:'easy'},
+  {id:'bt4',t:'binary-trees',name:'Invert Binary Tree',d:'medium'},{id:'bt5',t:'binary-trees',name:'Binary Tree Diameter',d:'medium'},
+  {id:'bt6',t:'binary-trees',name:'Find Successor',d:'medium'},{id:'bt7',t:'binary-trees',name:'Height Balanced Binary Tree',d:'medium'},
+  {id:'bt8',t:'binary-trees',name:'Merge Binary Trees',d:'medium'},{id:'bt9',t:'binary-trees',name:'Symmetrical Tree',d:'medium'},
+  {id:'bt10',t:'binary-trees',name:'Split Binary Tree',d:'medium'},
+  {id:'bt11',t:'binary-trees',name:'Max Path Sum In Binary Tree',d:'hard'},{id:'bt12',t:'binary-trees',name:'Find Nodes Distance K',d:'hard'},
+  {id:'bt13',t:'binary-trees',name:'Iterative In-order Traversal',d:'vhard'},{id:'bt14',t:'binary-trees',name:'Flatten Binary Tree',d:'vhard'},
+  {id:'bt15',t:'binary-trees',name:'Right Sibling Tree',d:'vhard'},{id:'bt16',t:'binary-trees',name:'All Kinds Of Node Depths',d:'vhard'},
+  {id:'bt17',t:'binary-trees',name:'Compare Leaf Traversal',d:'vhard'},
+  {id:'dp1',t:'dp',name:'Max Subset Sum No Adjacent',d:'easy'},{id:'dp2',t:'dp',name:'Number Of Ways To Make Change',d:'easy'},
+  {id:'dp3',t:'dp',name:'Min Number Of Coins For Change',d:'easy'},
+  {id:'dp4',t:'dp',name:'Levenshtein Distance',d:'medium'},{id:'dp5',t:'dp',name:'Number Of Ways To Traverse Graph',d:'medium'},
+  {id:'dp6',t:'dp',name:'Max Sum Increasing Subsequence',d:'medium'},
+  {id:'dp7',t:'dp',name:'Longest Common Subsequence',d:'hard'},{id:'dp8',t:'dp',name:'Min Number Of Jumps',d:'hard'},
+  {id:'dp9',t:'dp',name:'Water Area',d:'hard'},{id:'dp10',t:'dp',name:'Knapsack Problem',d:'hard'},
+  {id:'dp11',t:'dp',name:'Disk Stacking',d:'hard'},{id:'dp12',t:'dp',name:'Numbers In Pi',d:'hard'},
+  {id:'dp13',t:'dp',name:'Maximum Sum Submatrix',d:'hard'},{id:'dp14',t:'dp',name:'Maximize Expression',d:'hard'},
+  {id:'dp15',t:'dp',name:'Dice Throws',d:'hard'},{id:'dp16',t:'dp',name:'Juice Bottling',d:'hard'},
+  {id:'dp17',t:'dp',name:'Max Profit With K Transactions',d:'vhard'},{id:'dp18',t:'dp',name:'Palindrome Partitioning Min Cuts',d:'vhard'},
+  {id:'dp19',t:'dp',name:'Longest Increasing Subsequence',d:'vhard'},{id:'dp20',t:'dp',name:'Longest String Chain',d:'vhard'},
+  {id:'dp21',t:'dp',name:'Square of Zeroes',d:'vhard'},
+  {id:'fa1',t:'famous-algos',name:"Kadane's Algorithm",d:'easy'},{id:'fa2',t:'famous-algos',name:'Stable Internships',d:'easy'},
+  {id:'fa3',t:'famous-algos',name:'Union Find',d:'easy'},
+  {id:'fa4',t:'famous-algos',name:"Dijkstra's Algorithm",d:'hard'},{id:'fa5',t:'famous-algos',name:'Topological Sort',d:'hard'},
+  {id:'fa6',t:'famous-algos',name:"Kruskal's Algorithm",d:'hard'},{id:'fa7',t:'famous-algos',name:"Prim's Algorithm",d:'hard'},
+  {id:'fa8',t:'famous-algos',name:'Knuth-Morris-Pratt Algorithm',d:'vhard'},{id:'fa9',t:'famous-algos',name:'A* Algorithm',d:'vhard'},
+  {id:'g1',t:'graphs',name:'Depth-first Search',d:'easy'},{id:'g2',t:'graphs',name:'Single Cycle Check',d:'medium'},
+  {id:'g3',t:'graphs',name:'Breadth-first Search',d:'medium'},{id:'g4',t:'graphs',name:'River Sizes',d:'medium'},
+  {id:'g5',t:'graphs',name:'Youngest Common Ancestor',d:'medium'},{id:'g6',t:'graphs',name:'Remove Islands',d:'medium'},
+  {id:'g7',t:'graphs',name:'Cycle In Graph',d:'medium'},{id:'g8',t:'graphs',name:'Minimum Passes Of Matrix',d:'medium'},
+  {id:'g9',t:'graphs',name:'Two-Colorable',d:'medium'},
+  {id:'g10',t:'graphs',name:'Boggle Board',d:'hard'},{id:'g11',t:'graphs',name:'Largest Island',d:'hard'},
+  {id:'g12',t:'graphs',name:'Rectangle Mania',d:'vhard'},{id:'g13',t:'graphs',name:'Detect Arbitrage',d:'vhard'},
+  {id:'g14',t:'graphs',name:'Two-Edge-Connected Graph',d:'vhard'},{id:'g15',t:'graphs',name:'Airport Connections',d:'vhard'},
+  {id:'gr1',t:'greedy',name:'Minimum Waiting Time',d:'easy'},{id:'gr2',t:'greedy',name:'Class Photos',d:'easy'},
+  {id:'gr3',t:'greedy',name:'Tandem Bicycle',d:'easy'},
+  {id:'gr4',t:'greedy',name:'Optimal Freelancing',d:'medium'},{id:'gr5',t:'greedy',name:'Task Assignment',d:'medium'},
+  {id:'gr6',t:'greedy',name:'Valid Starting City',d:'medium'},
+  {id:'h1',t:'heaps',name:'Min Heap Construction',d:'medium'},{id:'h2',t:'heaps',name:'Continuous Median',d:'hard'},
+  {id:'h3',t:'heaps',name:'Sort K-Sorted Array',d:'hard'},{id:'h4',t:'heaps',name:'Laptop Rentals',d:'hard'},
+  {id:'h5',t:'heaps',name:'Merge Sorted Arrays',d:'vhard'},
+  {id:'ll1',t:'linked-lists',name:'Remove Duplicates From Linked List',d:'easy'},{id:'ll2',t:'linked-lists',name:'Middle Node',d:'easy'},
+  {id:'ll3',t:'linked-lists',name:'Linked List Construction',d:'medium'},{id:'ll4',t:'linked-lists',name:'Remove Kth Node From End',d:'medium'},
+  {id:'ll5',t:'linked-lists',name:'Sum of Linked Lists',d:'medium'},{id:'ll6',t:'linked-lists',name:'Merging Linked Lists',d:'medium'},
+  {id:'ll7',t:'linked-lists',name:'Find Loop',d:'hard'},{id:'ll8',t:'linked-lists',name:'Reverse Linked List',d:'hard'},
+  {id:'ll9',t:'linked-lists',name:'Merge Linked Lists',d:'hard'},{id:'ll10',t:'linked-lists',name:'Shift Linked List',d:'hard'},
+  {id:'ll11',t:'linked-lists',name:'LRU Cache',d:'vhard'},{id:'ll12',t:'linked-lists',name:'Rearrange Linked List',d:'vhard'},
+  {id:'ll13',t:'linked-lists',name:'Linked List Palindrome',d:'vhard'},{id:'ll14',t:'linked-lists',name:'Zip Linked List',d:'vhard'},
+  {id:'ll15',t:'linked-lists',name:'Node Swap',d:'vhard'},
+  {id:'r1',t:'recursion',name:'Nth Fibonacci',d:'easy'},{id:'r2',t:'recursion',name:'Product Sum',d:'easy'},
+  {id:'r3',t:'recursion',name:'Permutations',d:'medium'},{id:'r4',t:'recursion',name:'Powerset',d:'medium'},
+  {id:'r5',t:'recursion',name:'Phone Number Mnemonics',d:'medium'},{id:'r6',t:'recursion',name:'Staircase Traversal',d:'medium'},
+  {id:'r7',t:'recursion',name:'Blackjack Probability',d:'medium'},{id:'r8',t:'recursion',name:'Reveal Minesweeper',d:'medium'},
+  {id:'r9',t:'recursion',name:'Lowest Common Manager',d:'hard'},{id:'r10',t:'recursion',name:'Interweaving Strings',d:'hard'},
+  {id:'r11',t:'recursion',name:'Solve Sudoku',d:'hard'},{id:'r12',t:'recursion',name:'Generate Div Tags',d:'hard'},
+  {id:'r13',t:'recursion',name:'Ambiguous Measurements',d:'hard'},
+  {id:'r14',t:'recursion',name:'Number Of Binary Tree Topologies',d:'vhard'},{id:'r15',t:'recursion',name:'Non-Attacking Queens',d:'vhard'},
+  {id:'s1',t:'searching',name:'Binary Search',d:'easy'},{id:'s2',t:'searching',name:'Find Three Largest Numbers',d:'easy'},
+  {id:'s3',t:'searching',name:'Search In Sorted Matrix',d:'medium'},
+  {id:'s4',t:'searching',name:'Shifted Binary Search',d:'hard'},{id:'s5',t:'searching',name:'Search For Range',d:'hard'},
+  {id:'s6',t:'searching',name:'Quickselect',d:'hard'},{id:'s7',t:'searching',name:'Index Equals Value',d:'hard'},
+  {id:'s8',t:'searching',name:'Median Of Two Sorted Arrays',d:'vhard'},{id:'s9',t:'searching',name:'Optimal Assembly Line',d:'vhard'},
+  {id:'so1',t:'sorting',name:'Bubble Sort',d:'easy'},{id:'so2',t:'sorting',name:'Insertion Sort',d:'easy'},
+  {id:'so3',t:'sorting',name:'Selection Sort',d:'easy'},{id:'so4',t:'sorting',name:'Three Number Sort',d:'medium'},
+  {id:'so5',t:'sorting',name:'Quick Sort',d:'hard'},{id:'so6',t:'sorting',name:'Heap Sort',d:'hard'},
+  {id:'so7',t:'sorting',name:'Radix Sort',d:'hard'},{id:'so8',t:'sorting',name:'Merge Sort',d:'vhard'},
+  {id:'so9',t:'sorting',name:'Count Inversions',d:'vhard'},
+  {id:'st1',t:'stacks',name:'Min Max Stack Construction',d:'easy'},
+  {id:'st2',t:'stacks',name:'Balanced Brackets',d:'medium'},{id:'st3',t:'stacks',name:'Sunset Views',d:'medium'},
+  {id:'st4',t:'stacks',name:'Best Digits',d:'medium'},{id:'st5',t:'stacks',name:'Sort Stack',d:'medium'},
+  {id:'st6',t:'stacks',name:'Next Greater Element',d:'medium'},{id:'st7',t:'stacks',name:'Reverse Polish Notation',d:'medium'},
+  {id:'st8',t:'stacks',name:'Colliding Asteroids',d:'medium'},
+  {id:'st9',t:'stacks',name:'Shorten Path',d:'hard'},{id:'st10',t:'stacks',name:'Largest Rectangle Under Skyline',d:'hard'},
+  {id:'st11',t:'stacks',name:'Largest Park',d:'vhard'},
+  {id:'str1',t:'strings',name:'Palindrome Check',d:'easy'},{id:'str2',t:'strings',name:'Caesar Cipher Encryptor',d:'easy'},
+  {id:'str3',t:'strings',name:'Run-Length Encoding',d:'easy'},{id:'str4',t:'strings',name:'Common Characters',d:'easy'},
+  {id:'str5',t:'strings',name:'Generate Document',d:'easy'},{id:'str6',t:'strings',name:'First Non-Repeating Character',d:'easy'},
+  {id:'str7',t:'strings',name:'Semordnilap',d:'easy'},
+  {id:'str8',t:'strings',name:'Longest Palindromic Substring',d:'medium'},{id:'str9',t:'strings',name:'Group Anagrams',d:'medium'},
+  {id:'str10',t:'strings',name:'Valid IP Addresses',d:'medium'},{id:'str11',t:'strings',name:'Reverse Words In String',d:'medium'},
+  {id:'str12',t:'strings',name:'Minimum Characters For Words',d:'medium'},{id:'str13',t:'strings',name:'One Edit',d:'medium'},
+  {id:'str14',t:'strings',name:'Longest Substring Without Duplicates',d:'medium'},
+  {id:'str15',t:'strings',name:'Underscorify Substring',d:'hard'},{id:'str16',t:'strings',name:'Pattern Matcher',d:'hard'},
+  {id:'str17',t:'strings',name:'Smallest Substring Containing',d:'vhard'},{id:'str18',t:'strings',name:'Longest Balanced Substring',d:'vhard'},
+  {id:'tr1',t:'tries',name:'Suffix Trie Construction',d:'medium'},
+  {id:'tr2',t:'tries',name:'Multi String Search',d:'hard'},{id:'tr3',t:'tries',name:'Longest Most Frequent Prefix',d:'hard'},
+  {id:'tr4',t:'tries',name:'Shortest Unique Prefixes',d:'hard'},{id:'tr5',t:'tries',name:'Strings Made Up Of Strings',d:'vhard'},
+];
+
+// ─── FIREBASE SETUP ──────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyBSvGnjPgYEQZq7AywpcVvs9KZTIehrHvk",
+  authDomain: "dsa-app-4d1c7.firebaseapp.com",
+  databaseURL: "https://dsa-app-4d1c7-default-rtdb.firebaseio.com",
+  projectId: "dsa-app-4d1c7",
+  storageBucket: "dsa-app-4d1c7.firebasestorage.app",
+  messagingSenderId: "503198607213",
+  appId: "1:503198607213:web:0f6ee165a844802d155c64",
+  measurementId: "G-MFVZ1RD6QJ"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const DB_REF = db.ref("dsa-tracker-data");
+// Analytics only works in browser with a real HTTP origin (not file://)
+try { firebase.analytics(); } catch(e) { /* localhost / file:// — skip analytics */ }
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+const LS_KEY = 'dsa-v2';
+const TODAY = new Date().toISOString().slice(0, 10);
+
+// Single canonical state object — no duplicate declarations
+let S = { solved:{}, notes:{}, revisions:{}, dates:{}, daily:{}, target:3 };
+
+let curView = 'dash', curTopic = 'all';
+let AF = { easy:false, medium:false, hard:false, solved:false, unsolved:false };
+let SQ = '';
+let saveTimer = null;
+let charts = {};
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function mergeDefaults(obj) {
+  if (!obj.solved)    obj.solved    = {};
+  if (!obj.notes)     obj.notes     = {};
+  if (!obj.revisions) obj.revisions = {};
+  if (!obj.dates)     obj.dates     = {};
+  if (!obj.daily)     obj.daily     = {};
+  if (!obj.target)    obj.target    = 3;
+  return obj;
+}
+
+function banner(type, msg) {
+  const b = document.getElementById('sbanner');
+  b.className = 'sync-banner show ' + type;
+  document.getElementById('smsg').textContent = msg;
+  if (type !== 'syncing') setTimeout(() => b.classList.remove('show'), 2800);
+}
+
+// ─── LOAD ────────────────────────────────────────────────────────────────────
+// 1. Try localStorage first so UI is instant
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) S = mergeDefaults(JSON.parse(raw));
+  } catch(e) { /* ignore */ }
+}
+
+// 2. Firebase realtime listener — updates state and re-renders on any remote change
+function attachFirebase() {
+  DB_REF.on('value', snap => {
+    if (snap.exists()) {
+      S = mergeDefaults(snap.val());
+      // Also keep localStorage in sync for offline fallback
+      try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e) {}
+    }
+    // Reveal UI once we have a definitive answer from Firebase
+    hideOverlay();
+    document.getElementById('dtarget').value = S.target || 3;
+    upStats();
+    if (curView === 'qs') renderQs();
+  }, err => {
+    // Firebase error — just use whatever we loaded locally
+    console.warn('Firebase read error:', err);
+    hideOverlay();
+  });
+}
+
+let overlayHidden = false;
+function hideOverlay() {
+  if (overlayHidden) return;
+  overlayHidden = true;
+  const ov = document.getElementById('lov');
+  ov.classList.add('gone');
+  setTimeout(() => ov.style.display = 'none', 500);
+}
+
+// ─── SAVE ────────────────────────────────────────────────────────────────────
+// Debounced: saves to both Firebase and localStorage
+function sched() {
+  clearTimeout(saveTimer);
+  banner('syncing', 'Saving…');
+  saveTimer = setTimeout(() => {
+    // Always write localStorage immediately as a fallback
+    try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e) {}
+    // Then push to Firebase
+    DB_REF.set(S)
+      .then(()  => banner('saved', '✓ Synced across devices'))
+      .catch(()  => {
+        banner('error', '⚠ Firebase failed — saved locally');
+      });
+  }, 700);
+}
+
+// ─── STATS ───────────────────────────────────────────────────────────────────
+function gsol()  { return Object.values(S.solved).filter(Boolean).length; }
+function gtod()  { return S.daily[TODAY] || 0; }
+function gtp(id) { const qs=Q.filter(q=>q.t===id); return {total:qs.length, solved:qs.filter(q=>S.solved[q.id]).length}; }
+function gstreak() {
+  let s=0, d=new Date();
+  for (let i=0; i<365; i++) {
+    const k=d.toISOString().slice(0,10);
+    if ((S.daily[k]||0)>0) { s++; d.setDate(d.getDate()-1); } else break;
+  }
+  return s;
+}
+
+function upStats() {
+  const tot=Q.length, sol=gsol(), rem=tot-sol, tod=gtod(), pct=Math.round(sol/tot*100), stk=gstreak();
+  document.getElementById('sbtot').textContent=tot;
+  document.getElementById('sbsol').textContent=sol;
+  document.getElementById('sbrem').textContent=rem;
+  document.getElementById('sbtod').textContent=tod;
+  document.getElementById('sbpct').textContent=pct+'% complete';
+  document.getElementById('stknum').textContent=stk;
+  document.getElementById('dtot').textContent=tot;
+  document.getElementById('dsol').textContent=sol;
+  document.getElementById('dsolpct').textContent=pct+'% complete';
+  document.getElementById('drem').textContent=rem;
+  document.getElementById('dtod').textContent=tod;
+  document.getElementById('deasy').textContent=Q.filter(q=>q.d==='easy'&&S.solved[q.id]).length;
+  document.getElementById('dmed').textContent=Q.filter(q=>q.d==='medium'&&S.solved[q.id]).length;
+  document.getElementById('dhard').textContent=Q.filter(q=>(q.d==='hard'||q.d==='vhard')&&S.solved[q.id]).length;
+  const tg=parseInt(document.getElementById('dtarget').value)||3;
+  const days=rem>0?Math.ceil(rem/tg)+'d':'🎉 Done!';
+  document.getElementById('estdays').textContent=days;
+  document.getElementById('ddays').textContent=rem>0?Math.ceil(rem/tg):'🎉';
+  buildNav(); buildTPBars();
+  if (curView==='dash') upCharts();
+}
+
+function onTarget() { S.target=parseInt(document.getElementById('dtarget').value)||3; upStats(); sched(); }
+
+// ─── NAV ─────────────────────────────────────────────────────────────────────
+function buildNav() {
+  const el=document.getElementById('tnav'); el.innerHTML='';
+  TOPICS.forEach(t=>{
+    const {total,solved}=gtp(t.id);
+    const b=document.createElement('button');
+    b.className='nav-item'+(curTopic===t.id&&curView==='qs'?' active':'');
+    b.id='nav-'+t.id; b.onclick=()=>showQs(t.id);
+    b.innerHTML=`<span class="tdot" style="background:${t.color}"></span>${t.name}<span class="tcnt">${solved}/${total}</span>`;
+    el.appendChild(b);
+  });
+}
+
+// ─── CHARTS ──────────────────────────────────────────────────────────────────
+function dc(id) { if(charts[id]){charts[id].destroy();delete charts[id];} }
+function upCharts() {
+  const tot=Q.length, sol=gsol(), rem=tot-sol;
+  dc('c1'); charts['c1']=new Chart(document.getElementById('dc1'),{type:'doughnut',
+    data:{labels:['Solved','Remaining'],datasets:[{data:[sol,rem],backgroundColor:['#00c853','#252d3d'],borderColor:['#00c853','#2a3348'],borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},cutout:'72%'}});
+  const ec=Q.filter(q=>q.d==='easy').length,mc=Q.filter(q=>q.d==='medium').length,hc=Q.filter(q=>q.d==='hard').length,vc=Q.filter(q=>q.d==='vhard').length;
+  dc('c2'); charts['c2']=new Chart(document.getElementById('dc2'),{type:'doughnut',
+    data:{labels:['Easy','Medium','Hard','Very Hard'],datasets:[{data:[ec,mc,hc,vc],backgroundColor:['#00c853','#2979ff','#ef5350','#2a2a2a'],borderColor:['#1a3a2a','#1a2540','#3a1515','#111'],borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#8b9ab8',font:{size:11},boxWidth:10,padding:10}}},cutout:'60%'}});
+  const tl=TOPICS.map(t=>t.name.length>14?t.name.slice(0,14)+'…':t.name);
+  const ts=TOPICS.map(t=>gtp(t.id).solved), tt=TOPICS.map(t=>gtp(t.id).total);
+  const wrap=document.getElementById('tcwrap'); wrap.style.height=Math.max(200,TOPICS.length*34+60)+'px';
+  dc('c3'); charts['c3']=new Chart(document.getElementById('dc3'),{type:'bar',
+    data:{labels:tl,datasets:[{label:'Solved',data:ts,backgroundColor:'#00c853',borderRadius:3},{label:'Left',data:tt.map((t,i)=>t-ts[i]),backgroundColor:'#252d3d',borderRadius:3}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{stacked:true,ticks:{color:'#5a6a88',font:{size:11}},grid:{color:'rgba(42,51,72,0.5)'}},
+              y:{stacked:true,ticks:{color:'#8b9ab8',font:{size:11}},grid:{color:'rgba(42,51,72,0.3)'}}}}});
+  const dl=[], dv=[];
+  for (let i=13; i>=0; i--) { const d=new Date(); d.setDate(d.getDate()-i); const k=d.toISOString().slice(0,10); dl.push(k.slice(5)); dv.push(S.daily[k]||0); }
+  dc('c4'); charts['c4']=new Chart(document.getElementById('dc4'),{type:'line',
+    data:{labels:dl,datasets:[{label:'Solved',data:dv,borderColor:'#4f8aff',backgroundColor:'rgba(79,138,255,0.08)',fill:true,tension:0.4,pointBackgroundColor:'#4f8aff',pointRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#5a6a88',font:{size:10}},grid:{color:'rgba(42,51,72,0.4)'}},
+              y:{ticks:{color:'#5a6a88',font:{size:10},stepSize:1},grid:{color:'rgba(42,51,72,0.4)'},min:0}}}});
+}
+
+function buildTPBars() {
+  const el=document.getElementById('tpbars'); el.innerHTML='';
+  TOPICS.forEach(t=>{
+    const {total,solved}=gtp(t.id), pct=total?Math.round(solved/total*100):0;
+    el.innerHTML+=`<div style="margin-bottom:14px;cursor:pointer" onclick="showQs('${t.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:12px;color:var(--text2)">${t.name}</span>
+        <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">${solved}/${total} · ${pct}%</span>
+      </div>
+      <div style="background:var(--bg4);border-radius:3px;height:5px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${t.color};border-radius:3px;transition:width .4s"></div>
+      </div>
+    </div>`;
+  });
+}
+
+// ─── VIEWS ───────────────────────────────────────────────────────────────────
+function showDash() {
+  curView='dash'; curTopic='all';
+  document.getElementById('vdash').className='dash on';
+  document.getElementById('vqs').className='qview';
+  document.getElementById('mtitle').textContent='Dashboard';
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('nav-dash').classList.add('active');
+  upStats();
+}
+
+function showQs(tid) {
+  curView='qs'; curTopic=tid;
+  document.getElementById('vdash').className='dash';
+  document.getElementById('vqs').className='qview on';
+  const obj=TOPICS.find(t=>t.id===tid);
+  document.getElementById('mtitle').textContent=tid==='all'?'All Questions':(obj?obj.name:'Questions');
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const ne=document.getElementById('nav-'+(tid==='all'?'all':tid));
+  if (ne) ne.classList.add('active');
+  renderQs();
+}
+
+function renderQs() {
+  const cont=document.getElementById('qcont'); cont.innerHTML='';
+  const show=curTopic==='all'?TOPICS:TOPICS.filter(t=>t.id===curTopic);
+  show.forEach(topic=>{
+    let qs=Q.filter(q=>q.t===topic.id); qs=filt(qs);
+    if (!qs.length) return;
+    const {total,solved}=gtp(topic.id), pct=total?Math.round(solved/total*100):0;
+    const g=document.createElement('div'); g.className='tg';
+    g.innerHTML=`<div class="th" id="th-${topic.id}" onclick="tcol('${topic.id}')">
+      <span style="width:10px;height:10px;border-radius:50%;background:${topic.color};flex-shrink:0"></span>
+      <h3>${topic.name}</h3><span class="tcnt2">${solved}/${total}</span>
+      <div class="tpw"><div class="tpb"><div class="tpf" style="width:${pct}%;background:${topic.color}"></div></div><div class="tpp">${pct}%</div></div>
+      <span class="ci">▾</span>
+    </div>
+    <div class="tcc" id="tc-${topic.id}" style="max-height:9999px">${buildT(qs)}</div>`;
+    cont.appendChild(g);
+  });
+}
+
+function buildT(qs) {
+  let rows='';
+  qs.forEach(q=>{
+    const sol=S.solved[q.id]||false, star=S.revisions[q.id]||false;
+    const note=(S.notes[q.id]||'').replace(/"/g,'&quot;'), dv=S.dates[q.id]||'';
+    rows+=`<tr class="${sol?'done':''}" data-id="${q.id}">
+      <td style="width:40px;padding:10px 6px 10px 14px"><input type="checkbox" class="qchk" ${sol?'checked':''} onchange="chkSol('${q.id}',this)"></td>
+      <td class="qn">${q.name}</td>
+      <td style="width:170px"><div style="display:flex;align-items:center;gap:8px">
+        <div style="width:5px;height:26px;border-radius:3px;background:${DC[q.d]};flex-shrink:0"></div>
+        <span class="dtag ${q.d}"><span class="cb"></span>${DL[q.d]}</span>
+      </div></td>
+      <td style="width:30px;text-align:center"><span class="star ${star?'on':''}" onclick="chkStar('${q.id}',this)">★</span></td>
+      <td><input class="ni" placeholder="Add note…" value="${note}" onchange="saveN('${q.id}',this.value)"></td>
+      <td class="dc">${dv||'—'}</td>
+      <td style="width:70px">${sol?'<span class="sbadge">✓ Done</span>':''}</td>
+    </tr>`;
+  });
+  return `<table class="qt"><thead><tr><th style="width:40px"></th><th>Question</th><th style="width:170px">Difficulty</th><th style="width:30px">Rev</th><th>Notes</th><th style="width:90px">Last Solved</th><th style="width:70px">Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function filt(qs) {
+  let r=qs;
+  if (SQ) r=r.filter(q=>q.name.toLowerCase().includes(SQ.toLowerCase()));
+  const df=['easy','medium','hard'].filter(d=>AF[d]);
+  if (df.length) r=r.filter(q=>{const dm=q.d==='vhard'?'hard':q.d;return df.includes(dm);});
+  if (AF.solved&&!AF.unsolved)   r=r.filter(q=>S.solved[q.id]);
+  if (AF.unsolved&&!AF.solved)   r=r.filter(q=>!S.solved[q.id]);
+  return r;
+}
+
+function tcol(id) {
+  const th=document.getElementById('th-'+id), tc=document.getElementById('tc-'+id);
+  const c=th.classList.toggle('col');
+  tc.style.maxHeight=c?'0':'9999px'; tc.classList.toggle('col',c);
+}
+
+function chkSol(id, cb) {
+  S.solved[id]=cb.checked;
+  if (cb.checked) { S.dates[id]=TODAY; S.daily[TODAY]=(S.daily[TODAY]||0)+1; }
+  else if ((S.daily[TODAY]||0)>0) S.daily[TODAY]--;
+  const row=cb.closest('tr');
+  row.classList.toggle('done',cb.checked);
+  row.querySelector('td:last-child').innerHTML=cb.checked?'<span class="sbadge">✓ Done</span>':'';
+  row.querySelector('.dc').textContent=cb.checked?TODAY:'—';
+  row.querySelector('.qn').style.color=cb.checked?'var(--easy)':'var(--text)';
+  upStats(); sched();
+}
+
+function chkStar(id, el) { S.revisions[id]=!S.revisions[id]; el.classList.toggle('on',S.revisions[id]); sched(); }
+function saveN(id, v)     { S.notes[id]=v; sched(); }
+
+function tf(type) {
+  AF[type]=!AF[type];
+  const map={easy:'fce',medium:'fcm',hard:'fch',solved:'fcs',unsolved:'fcu'};
+  document.getElementById(map[type]).classList.toggle('on',AF[type]);
+  renderQs();
+}
+
+function onSearch() {
+  SQ=document.getElementById('sinput').value.trim();
+  if (curView==='qs') renderQs();
+  else if (SQ) showQs('all');
+}
+
+window.addEventListener('scroll',
+  () => document.getElementById('stbtn').classList.toggle('show', window.scrollY>400),
+  {passive:true}
+);
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+function init() {
+  loadLocal();                            // instant: paint from cache
+  document.getElementById('dtarget').value = S.target || 3;
+  buildNav(); upStats(); showDash();      // render with local data
+  attachFirebase();                       // overlay hidden when Firebase responds
+  // Fallback: hide overlay after 3s even if Firebase is slow
+  setTimeout(hideOverlay, 3000);
+}
+
+init();
+</script>
+</body>
+</html>
